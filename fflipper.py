@@ -1,24 +1,29 @@
-import sys, re, os, time, subprocess
-from Tkinter import *
-## from ttk import *
-import tkFileDialog
-import tkMessageBox
-import clipper.clipper as clipper
-import pyelan.pyelan as pyelan
+#!/usr/bin/env python3
+
+# standard imports
+import re
+import os
+from tkinter import filedialog, messagebox
+from tkinter import *
+
+# self imports
+from clipper import clipper
+from pyelan import pyelan
 
 
-
-
-
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 # Number Appender
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
+
 
 # this is not used, and does not work.
 def numAppend(seq, idfun=None):
     # order preserving
     if idfun is None:
-        def idfun(x): return x
+
+        def idfun(x):
+            return x
+
     seen = {}
     result = []
     for item in seq:
@@ -27,11 +32,10 @@ def numAppend(seq, idfun=None):
         # if seen.has_key(marker)
         # but in new ones:
         if marker in seen:
-            item = ''.join([marker,"1"])
+            item = "".join([marker, "1"])
         seen[marker] = 1
         result.append(item)
     return result
-
 
 
 class AutoScrollbar(Scrollbar):
@@ -44,54 +48,62 @@ class AutoScrollbar(Scrollbar):
         else:
             self.grid()
         Scrollbar.set(self, lo, hi)
+
     def pack(self, **kw):
         raise TclError("cannot use pack with this widget")
+
     def place(self, **kw):
         raise TclError("cannot use place with this widget")
 
 
-
 class fflipper:
     """The main class that operates the Tk gui."""
+
     def __init__(self, master):
-        self.allTiers = [] # storage for the tiers of an ELAN file
-        self.savePath = os.curdir # storage for the save path
-        self.checkBoxen = [] # storage for the tier checkboxes
-        self.subProcs = [] # for subprocess of clipping
+        self.allTiers = []  # storage for the tiers of an ELAN file
+        self.savePath = os.curdir  # storage for the save path
+        self.checkBoxen = []  # storage for the tier checkboxes
+        self.subProcs = []  # for subprocess of clipping
 
         # Generate the self.master window.
         master.title("fflipper")
-        master.config(padx = 10, pady = 10)
+        master.config(padx=10, pady=10)
         self.elanFind = Frame(master, width=700, height=25)
-        self.elanFind.grid(row=0, columnspan=4, sticky=N+S+E+W)
+        self.elanFind.grid(row=0, columnspan=4, sticky=N + S + E + W)
         self.elanFind.grid_propagate(False)
 
-
         # generate the header
-        self.selElan = Label(self.elanFind, text="Please select an ELAN file to clip. Make sure that the media is associated correctly.")
+        self.selElan = Label(
+            self.elanFind,
+            text="Please select an ELAN file to clip. Make sure that the media is associated correctly.",
+        )
         self.selElan.grid(row=0, column=0, sticky=W)
 
-        self.elanFile = Button(self.elanFind, text="Open an ELAN file", command=lambda: self.selectTiers(self.tierSelectionTB, self.canvasTier))
+        self.elanFile = Button(
+            self.elanFind,
+            text="Open an ELAN file",
+            command=lambda: self.selectTiers(self.tierSelectionTB, self.canvasTier),
+        )
         self.elanFile.grid(row=0, column=1, sticky=E)
 
-
-
         # generate the tiers frame
-        self.tierSelection = LabelFrame(master, width=300, height=200, text='Tiers')
+        self.tierSelection = LabelFrame(master, width=300, height=200, text="Tiers")
         self.tierSelection.grid(row=1, column=0, columnspan=2, sticky=W)
         self.tierSelection.grid_propagate(0)
 
         # autscrollbars for tiers
         vscrollbar = AutoScrollbar(self.tierSelection)
-        vscrollbar.grid(row=0, column=1, sticky=N+S)
+        vscrollbar.grid(row=0, column=1, sticky=N + S)
         hscrollbar = AutoScrollbar(self.tierSelection, orient=HORIZONTAL)
-        hscrollbar.grid(row=1, column=0, sticky=E+W)
+        hscrollbar.grid(row=1, column=0, sticky=E + W)
 
         # scrolling canvas for tiers
-        self.canvasTier = Canvas(self.tierSelection,
-                        yscrollcommand=vscrollbar.set,
-                        xscrollcommand=hscrollbar.set)
-        self.canvasTier.grid(row=0, column=0, sticky=N+S+E+W)
+        self.canvasTier = Canvas(
+            self.tierSelection,
+            yscrollcommand=vscrollbar.set,
+            xscrollcommand=hscrollbar.set,
+        )
+        self.canvasTier.grid(row=0, column=0, sticky=N + S + E + W)
 
         vscrollbar.config(command=self.canvasTier.yview)
         hscrollbar.config(command=self.canvasTier.xview)
@@ -105,69 +117,82 @@ class fflipper:
         self.tierSelectionTB.rowconfigure(1, weight=1)
         self.tierSelectionTB.columnconfigure(1, weight=1)
 
-        self.canvasTier.bind("<MouseWheel>", lambda event:  self.canvasTier.yview("scroll", event.delta,"units"))
-        self.tierSelectionTB.bind("<MouseWheel>", lambda event:  self.canvasTier.yview("scroll", event.delta,"units"))
-
+        self.canvasTier.bind(
+            "<MouseWheel>",
+            lambda event: self.canvasTier.yview("scroll", event.delta, "units"),
+        )
+        self.tierSelectionTB.bind(
+            "<MouseWheel>",
+            lambda event: self.canvasTier.yview("scroll", event.delta, "units"),
+        )
 
         # ties the frame to the canvas ("the canvas acts like a geometry manager")
         self.canvasTier.create_window(0, 0, anchor=NW, window=self.tierSelectionTB)
         # Can probably be deleted, because they are dealt with in the tiers function
-        #self.tierSelectionTB.update_idletasks()
-        #self.canvasTier.config(scrollregion=self.canvasTier.bbox("all"))
+        # self.tierSelectionTB.update_idletasks()
+        # self.canvasTier.config(scrollregion=self.canvasTier.bbox("all"))
 
-
-        separator = Frame(master,width=10)
-        separator.grid(row=1,column=2, rowspan=2)
+        separator = Frame(master, width=10)
+        separator.grid(row=1, column=2, rowspan=2)
 
         # generate the progress area.
-        progressArea = LabelFrame(master, width=500, height=600, text='Progress')
+        progressArea = LabelFrame(master, width=500, height=600, text="Progress")
         progressArea.grid(row=1, column=3, rowspan=2, sticky=W)
         progressArea.grid_propagate(0)
 
-
         # generate the options area.
-        optionsArea = LabelFrame(master, width=300, height=400, text='Options')
+        optionsArea = LabelFrame(master, width=300, height=400, text="Options")
         optionsArea.grid(row=2, column=0, columnspan=2, sticky=W)
         optionsArea.grid_propagate(0)
 
         # append tier name to annotation
         self.appendTier = BooleanVar()
         self.appendTier.set(True)
-        aTier = Checkbutton(optionsArea, text="append tier name to annotation", variable=self.appendTier, command=self.samplePathUpdate)
-        aTier.grid(row = 0, sticky=W)
+        aTier = Checkbutton(
+            optionsArea,
+            text="append tier name to annotation",
+            variable=self.appendTier,
+            command=self.samplePathUpdate,
+        )
+        aTier.grid(row=0, sticky=W)
 
         # Doesn't work because it doesn't make the directory, need to fix that immediately before clipping, or does ffmpeg have a make dir option?
         self.folderTier = BooleanVar()
         self.folderTier.set(False)
-        fTier = Checkbutton(optionsArea, text="each tier in a separate folder", variable=self.folderTier, command=self.samplePathUpdate)
-        fTier.grid(row = 1, sticky=W)
+        fTier = Checkbutton(
+            optionsArea,
+            text="each tier in a separate folder",
+            variable=self.folderTier,
+            command=self.samplePathUpdate,
+        )
+        fTier.grid(row=1, sticky=W)
 
         # no audio?
         self.audio = BooleanVar()
         self.audio.set(False)
         udio = Checkbutton(optionsArea, text="audio", variable=self.audio)
-        udio.grid(row = 2, sticky=W)
+        udio.grid(row=2, sticky=W)
 
         # video codec
         separator.grid(row=3)
 
         self.videoCodec = StringVar()
-        self.videoCodec.set('h264')
+        self.videoCodec.set("h264")
         cLabel = Label(optionsArea, text="video codec:")
         cLabel.grid(row=4, sticky=W)
         vCodec = Entry(optionsArea, textvariable=self.videoCodec, width=35)
-        vCodec.grid(row = 5, sticky=E)
+        vCodec.grid(row=5, sticky=E)
         vCodec.bind("<KeyRelease>", lambda event: self.samplePathUpdate())
 
         # video filters
         separator.grid(row=6)
 
         self.videoFilters = StringVar()
-        self.videoFilters.set("") # [in] yadif=1 [out] for deinterlacing
+        self.videoFilters.set("")  # [in] yadif=1 [out] for deinterlacing
         vfLabel = Label(optionsArea, text="video filters:")
         vfLabel.grid(row=7, sticky=W)
         vFilters = Entry(optionsArea, textvariable=self.videoFilters, width=35)
-        vFilters.grid(row = 8, sticky=E)
+        vFilters.grid(row=8, sticky=E)
         vFilters.bind("<KeyRelease>", lambda event: self.samplePathUpdate())
 
         # video quality options
@@ -178,7 +203,7 @@ class fflipper:
         vfLabel = Label(optionsArea, text="video quality:")
         vfLabel.grid(row=10, sticky=W)
         vQuality = Entry(optionsArea, textvariable=self.videoQuality, width=35)
-        vQuality.grid(row =11, sticky=E)
+        vQuality.grid(row=11, sticky=E)
         vQuality.bind("<KeyRelease>", lambda event: self.samplePathUpdate())
 
         # other options
@@ -189,36 +214,36 @@ class fflipper:
         vfLabel = Label(optionsArea, text="other options:")
         vfLabel.grid(row=13, sticky=W)
         oOptions = Entry(optionsArea, textvariable=self.otherOptions, width=35)
-        oOptions.grid(row =14, sticky=E)
+        oOptions.grid(row=14, sticky=E)
         oOptions.bind("<KeyRelease>", lambda event: self.samplePathUpdate())
-
 
         # prepend to each file option
         separator.grid(row=15)
 
         self.prependName = StringVar()
-        self.prependName.set('')
+        self.prependName.set("")
         pLabel = Label(optionsArea, text="prepend to every clip:")
         pLabel.grid(row=16, sticky=W)
         pName = Entry(optionsArea, textvariable=self.prependName, width=35)
-        pName.grid(row = 17, sticky=E)
+        pName.grid(row=17, sticky=E)
         pName.bind("<KeyRelease>", lambda event: self.samplePathUpdate())
 
         # save to button
         separator.grid(row=18)
 
         self.saveTo = Button(optionsArea, text="Save to...", command=self.sPath)
-        self.saveTo.grid(row=19, column=0, sticky=W )
+        self.saveTo.grid(row=19, column=0, sticky=W)
 
         # clipping button
         self.clip = Button(master, text="Begin clipping", command=self.clipPrep)
-        self.clip.grid(row=3, column=0, sticky=W )
+        self.clip.grid(row=3, column=0, sticky=W)
 
         # locations string. Mostly works, doesn't update on import of clips (feature, not a bug?)
         self.pathSample = StringVar()
-        self.pathSamp = Label(master, textvariable=self.pathSample, wraplength=680, fg="dark gray")
-        self.pathSamp.grid(row=3, column = 1, columnspan=3, sticky=E)
-
+        self.pathSamp = Label(
+            master, textvariable=self.pathSample, wraplength=680, fg="dark gray"
+        )
+        self.pathSamp.grid(row=3, column=1, columnspan=3, sticky=E)
 
     def samplePathUpdate(self):
         path = self.samplePathGen()
@@ -229,56 +254,58 @@ class fflipper:
         basePath = self.savePath
         if self.folderTier.get():
             if basePath[-1] == os.sep:
-                basePath = ''.join([basePath,tier])
+                basePath = "".join([basePath, tier])
             else:
-                basePath = os.sep.join([basePath,tier])
+                basePath = os.sep.join([basePath, tier])
         if self.appendTier.get():
-            filename = filename+tier
-        filename +=  annoVal
+            filename = filename + tier
+        filename += annoVal
 
         # do not add extraneous separators. change to os.sep.join()? probably not.
         if basePath[-1] == os.sep:
-            path = ''.join([basePath,filename])
+            path = "".join([basePath, filename])
         else:
-            path = os.sep.join([basePath,filename])
+            path = os.sep.join([basePath, filename])
         return path
 
     def samplePathGen(self):
         relTiers = self.relativizeTiers()
         # Check if there are any relative tiers.
         if relTiers.tiers != []:
-            path = self.pathGen(tier=relTiers.tiers[0].tierName, annoVal=relTiers.tiers[0].annotations[0].value)
+            path = self.pathGen(
+                tier=relTiers.tiers[0].tierName,
+                annoVal=relTiers.tiers[0].annotations[0].value,
+            )
         else:
-            path = ''
+            path = ""
         return path
 
     def relativizeTiers(self):
-        newTierNames=[]
+        newTierNames = []
         for checkBox in self.checkBoxen:
             if checkBox[1].get():
                 newTierNames.append(checkBox[0])
         try:
-            relTiers = pyelan.tierSet.selectedTiers(self.allTiers,newTierNames)
+            relTiers = pyelan.tierSet.selectedTiers(self.allTiers, newTierNames)
         except TypeError:
-            #error if there are no tiers selected.
-            tkMessageBox.showwarning(
+            # error if there are no tiers selected.
+            messagebox.showwarning(
                 "No tiers detected",
-                "There are no tiers to work with. Please select a (new) ELAN file.")
+                "There are no tiers to work with. Please select a (new) ELAN file.",
+            )
         return relTiers
 
     def sPath(self):
-        path = tkFileDialog.askdirectory()
-        if path: #check that there is a new path.
+        path = filedialog.askdirectory()
+        if path:  # check that there is a new path.
             self.savePath = path
         self.samplePathUpdate()
 
     def clipPrep(self):
         relTiers = self.relativizeTiers()
         if relTiers.tiers == []:
-            #error if there are no tiers selected.
-            tkMessageBox.showwarning(
-            "No tiers selected",
-            "There are no tiers selected.")
+            # error if there are no tiers selected.
+            messagebox.showwarning("No tiers selected", "There are no tiers selected.")
 
         # grab the first media file only. This might not be the right medial file if there is more than one.
         inFile = relTiers.media[0]
@@ -291,15 +318,26 @@ class fflipper:
             trName = tr.tierName
             numCores = 4
             freeProcs = numCores
-            numAnnosLeft = len (tr.annotations)
-            print("numannosleft",numAnnosLeft)
+            numAnnosLeft = len(tr.annotations)
+            print("numannosleft", numAnnosLeft)
             for anno in tr.annotations:
-                outFile = self.pathGen( tier=trName, annoVal=anno.value)
+                outFile = self.pathGen(tier=trName, annoVal=anno.value)
                 annos = (anno.begin, anno.end)
-                self.subProcs.append(clipper.clipper(annos=annos, outPath=outFile, inFile=inFile, audio=audio, videoFilters=videoFilters, videoCodec=videoCodec, videoQuality=videoQuality,otherOptions=otherOptions))
+                self.subProcs.append(
+                    clipper.clipper(
+                        annos=annos,
+                        outPath=outFile,
+                        inFile=inFile,
+                        audio=audio,
+                        videoFilters=videoFilters,
+                        videoCodec=videoCodec,
+                        videoQuality=videoQuality,
+                        otherOptions=otherOptions,
+                    )
+                )
                 numAnnosLeft = numAnnosLeft - 1
-                print("numannosleft",numAnnosLeft)
-                freeProcs = freeProcs-1
+                print("numannosleft", numAnnosLeft)
+                freeProcs = freeProcs - 1
                 if numAnnosLeft == 0:
                     freeProcs = 0
                     print("Last Process!")
@@ -316,7 +354,7 @@ class fflipper:
                                 outPut = singleProc.subProc.stdout.readline()
                                 frames = frameReg.match(outPut)
                                 if frames:
-                                    print("frames:",frames.group(1))
+                                    print("frames:", frames.group(1))
 
                                 singleProc.subProc.poll()
                             else:
@@ -332,47 +370,65 @@ class fflipper:
                             else:
                                 nnComp += 1
                         nComplete = nnComp
-                    self.subProcs = [] # for subprocess of clipping
-                    print(nComplete,"/",numProcs)
+                    self.subProcs = []  # for subprocess of clipping
+                    print(nComplete, "/", numProcs)
                     print("Reseting to the next batch of processes.")
                     freeProcs = numCores
         return self.subProcs
 
-
-
-    def selectTiers(self,tierSelection, canvasTier):
-        file_opt = options =  {}
-        options['filetypes'] = [('eaf files', '.eaf'), ('all files', '.*')]
-        file = tkFileDialog.askopenfilename(**options)
+    def selectTiers(self, tierSelection, canvasTier):
+        file_opt = options = {}
+        options["filetypes"] = [("eaf files", ".eaf"), ("all files", ".*")]
+        file = filedialog.askopenfilename(**options)
         try:
             self.allTiers = pyelan.tierSet(file=file)
-        except pyelan.noMediaError, e:
-            #error if there are no tiers selected.
-            tkMessageBox.showwarning(
+        except pyelan.noMediaError as e:
+            # error if there are no tiers selected.
+            messagebox.showwarning(
                 "No media found",
-                "Could not find the media attached to the ELAN file (path:"+e.filename+"). Please open the ELAN file, find the media, and then save it again.")
+                f"Could not find the media attached to the ELAN file (path:'{e.filename}'). Please open the ELAN file, find the media, and then save it again.",
+            )
         ## top = Toplevel()
         ## top.title("Tier selection")
         ## frame = Frame(top)
         ## frame.pack()
 
-        self.msg = Label(tierSelection, text="Which tiers would you like to clip?", wraplength=2000, anchor=W, justify=LEFT)
-        self.msg.grid(row=0, sticky=N+W)
-        self.msg.bind("<MouseWheel>", lambda event:  self.canvasTier.yview("scroll", event.delta,"units"))
+        self.msg = Label(
+            tierSelection,
+            text="Which tiers would you like to clip?",
+            wraplength=2000,
+            anchor=W,
+            justify=LEFT,
+        )
+        self.msg.grid(row=0, sticky=N + W)
+        self.msg.bind(
+            "<MouseWheel>",
+            lambda event: self.canvasTier.yview("scroll", event.delta, "units"),
+        )
 
         self.checkBoxen = []
         r = 1
         for tier in self.allTiers.tiers:
             name = tier.tierName
             count = len(tier.annotations)
-            text = ''.join([name," (",str(count)," annotations)"])
-            self.checkBoxen.append([name,BooleanVar()])
-            self.checkBoxen[-1][1].set('False')
-            self.checkBoxen[-1].append(Checkbutton(tierSelection, text=text, variable=self.checkBoxen[-1][1], command=self.samplePathUpdate))
-            self.checkBoxen[-1][-1].grid(row = r, sticky=W)
-            self.checkBoxen[-1][-1].bind("<MouseWheel>", lambda event:  self.canvasTier.yview("scroll", event.delta,"units"))
+            text = "".join([name, " (", str(count), " annotations)"])
+            self.checkBoxen.append([name, BooleanVar()])
+            self.checkBoxen[-1][1].set("False")
+            self.checkBoxen[-1].append(
+                Checkbutton(
+                    tierSelection,
+                    text=text,
+                    variable=self.checkBoxen[-1][1],
+                    command=self.samplePathUpdate,
+                )
+            )
+            self.checkBoxen[-1][-1].grid(row=r, sticky=W)
+            self.checkBoxen[-1][-1].bind(
+                "<MouseWheel>",
+                lambda event: self.canvasTier.yview("scroll", event.delta, "units"),
+            )
             r += 1
-        #Change the save to path to the path of the ELAN file.
+        # Change the save to path to the path of the ELAN file.
         self.savePath = self.allTiers.pathELAN
 
         # to alter the scroll size of the canvas.
@@ -380,10 +436,7 @@ class fflipper:
         canvasTier.config(scrollregion=canvasTier.bbox(ALL))
 
 
-
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     root = Tk()
 
     app = fflipper(root)
